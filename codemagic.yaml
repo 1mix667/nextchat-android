@@ -1,0 +1,48 @@
+# Codemagic — Android APK для NextChat через Capacitor.
+# Подключение: codemagic.io → Add application → GitHub → этот репозиторий →
+# "Use codemagic.yaml" → запустить workflow android-apk и выбрать ветку.
+# APK придёт письмом и будет в артефактах сборки.
+#
+# Важно: статический export NextChat (BUILD_MODE=export) падает с
+# "Server Actions are not supported with static export", потому что
+# app/mcp/actions.ts — "use server"-модуль. MCP серверный и по умолчанию
+# выключен, поэтому на время сборки подменяется стабом
+# (scripts/mcp-actions.stub.ts) и восстанавливается байт-в-байт после.
+# Для локальной сборки есть готовый скрипт scripts/export-static.sh
+# (подмена → сборка → гарантированное восстановление через trap).
+
+workflows:
+  android-apk:
+    name: NextChat — Android APK
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      node: 22
+      java: 21
+    triggering:
+      events:
+        - push
+    scripts:
+      - name: Зависимости
+        script: npm install
+      - name: Подмена MCP server actions стабом (нужно для export)
+        script: bash scripts/stub-mcp-in.sh
+      - name: Сборка веб-части (статический export)
+        script: |
+          npx tsx app/masks/build.ts
+          BUILD_MODE=export BUILD_APP=1 npx next build
+      - name: Восстановить MCP server actions
+        script: bash scripts/stub-mcp-out.sh
+      - name: Синхронизация Capacitor
+        script: npx cap sync android
+      - name: Gradle assembleDebug
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Переименовать APK
+        script: |
+          mkdir -p apk-artifacts
+          cp "$(find android/app/build/outputs/apk -name '*.apk' | head -n1)" apk-artifacts/NextChat.apk
+    artifacts:
+      - apk-artifacts/NextChat.apk
