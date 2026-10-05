@@ -1,0 +1,3 @@
+# nextchat-android
+
+NextChat wrapped with Capacitor; Android APK built via Codemagic.
